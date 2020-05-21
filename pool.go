@@ -17,7 +17,7 @@ type Pool struct {
 	running int32
 
 	// 空闲的worker超时时间，表示一直空闲很长时间的worker，超过时间被清理掉
-	outTime time.Duration
+	expiryDuration time.Duration
 
 	// worker协程池处理核心对象,workers为池里的空闲worker集合
 	workers []*Worker
@@ -28,7 +28,30 @@ type Pool struct {
 	// 保证数据处理安全
 	lock sync.Mutex
 
-	// once sync.Once
+	// once用在确保 Pool 关闭操作只会执行一次
+	once sync.Once
+}
+
+func NewPool(opts ...option) *Pool {
+	conf := &Options{}
+	for _, o := range opts {
+		o(conf)
+	}
+	if conf.capacity == 0 {
+		conf.capacity = 10
+	}
+	if conf.expiryDuration == 0 {
+		conf.expiryDuration = 300
+	}
+	p := &Pool{
+		capacity:       conf.capacity,
+		expiryDuration: conf.expiryDuration,
+		workers:        make([]*Worker),
+		release:        make(chan sig, 1),
+	}
+	// 开启线程清除空闲太久的worker
+	p.monitorAndClear()
+	return p, nil
 }
 
 // 提交任务到worker
