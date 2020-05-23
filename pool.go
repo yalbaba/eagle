@@ -46,16 +46,44 @@ func NewPool(opts ...option) *Pool {
 	p := &Pool{
 		capacity:       conf.capacity,
 		expiryDuration: conf.expiryDuration,
-		workers:        make([]*Worker),
 		release:        make(chan sig, 1),
 	}
 	// 开启线程清除空闲太久的worker
-	p.monitorAndClear()
-	return p, nil
+	go p.periodicallyPurge()
+	return p
+}
+
+func (p *Pool) periodicallyPurge() {
+	// 构造一个定时器，定时检查是否有空闲太久的worker
+	checkTicker := time.NewTicker(p.expiryDuration)
+	for range checkTicker.C {
+		nowtime := time.Now()
+		p.lock.Lock()
+		// 用中间变量来保存此时的闲置worker集，是因为此时可能有正在进行的worker执行完任务后往里面丢
+		freeWorkers := p.workers
+		var usedWorkers []*Worker
+		// 检查pool是否已经关闭或者没有worker在运行或闲置
+		if len(p.release) > 0 && p.Running() == 0 && len(p.workers) == 0 {
+			p.lock.Unlock()
+			return
+		}
+		for _, worker := range freeWorkers {
+			// 判断是否闲置超出定义的时间
+			if nowtime.Sub(worker.recycleTime) <= p.expiryDuration {
+				// 加入到未过期的集合中
+				usedWorkers = append(usedWorkers, worker)
+				continue
+			}
+			// 关闭worker
+			worker.task <- nil
+		}
+		p.workers = usedWorkers
+		p.lock.Unlock()
+	}
 }
 
 // 提交任务到worker
-func (p *Pool) Submit(task f) error {
+func (p *Pool) Submit(task handle) error {
 	if len(p.release) > 0 {
 		return fmt.Errorf("该协程池已经关闭")
 	}
@@ -68,7 +96,7 @@ func (p *Pool) Submit(task f) error {
 // 回收处理完任务的worker
 func (p *Pool) putWorker(worker *Worker) {
 	// 记录回收时间
-	worker.recycle = time.Now()
+	worker.recycleTime = time.Now()
 	p.lock.Lock()
 	// 放入协程池的worker队列中
 	p.workers = append(p.workers, worker)
@@ -114,7 +142,7 @@ func (p *Pool) getWorker() *Worker {
 		// 表示没有空闲worker但pool没有超过容量，则开启一个worker处理任务
 		w = &Worker{
 			pool: p,
-			task: make(chan f, 1),
+			task: make(chan handle, 1),
 		}
 		// 监听任务通道，处理任务
 		w.run()
@@ -138,6 +166,12 @@ func (p *Pool) Cap() int32 {
 	return atomic.LoadInt32(&p.capacity)
 }
 
+// 正在执行的worker加1
 func (p *Pool) incryRunning() {
 	atomic.AddInt32(&p.running, 1)
+}
+
+// 正在执行的worker减1
+func (p *Pool) dcrRunning() {
+	atomic.AddInt32(&p.running, -1)
 }
