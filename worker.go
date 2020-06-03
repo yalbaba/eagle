@@ -3,14 +3,14 @@ package eagle
 import "time"
 
 // task方法需自定义（没想好如何实现更通用）
-type handle func(...interface{}) error
+type Handler func(...interface{}) (...interface{},error)
 
 type Worker struct {
 	// 属于哪个池
 	pool *Pool
 
 	// 存任务方法的管道
-	task chan handle
+	task chan Handler
 
 	// 该worker重新放入队列的时间
 	recycleTime time.Time

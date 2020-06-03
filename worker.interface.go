@@ -1,7 +1,6 @@
 package eagle
 
-// type f func() error
+type Task interface{
+	Handle(...interface{})(...interface{},error)
+}
 
-// type Worker interface {
-// 	run()
-// }
