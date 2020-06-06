@@ -83,7 +83,7 @@ func (p *Pool) periodicallyPurge() {
 }
 
 // 提交任务到worker
-func (p *Pool) Submit(task handle) error {
+func (p *Pool) Submit(task Handler) error {
 	if len(p.release) > 0 {
 		return fmt.Errorf("该协程池已经关闭")
 	}
@@ -142,7 +142,7 @@ func (p *Pool) getWorker() *Worker {
 		// 表示没有空闲worker但pool没有超过容量，则开启一个worker处理任务
 		w = &Worker{
 			pool: p,
-			task: make(chan handle, 1),
+			task: make(chan Handler, 1),
 		}
 		// 监听任务通道，处理任务
 		w.run()

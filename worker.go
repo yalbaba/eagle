@@ -3,7 +3,7 @@ package eagle
 import "time"
 
 // task方法需自定义（没想好如何实现更通用）
-type Handler func(...interface{}) (...interface{},error)
+type Handler func(ps ...int) error
 
 type Worker struct {
 	// 属于哪个池
