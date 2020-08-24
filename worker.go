@@ -3,7 +3,9 @@ package eagle
 import "time"
 
 // task方法需自定义（没想好如何实现更通用）
-type Handler func(ps ...int) error
+type Handler interface {
+	Process()
+}
 
 type Worker struct {
 	// 属于哪个池
@@ -20,14 +22,14 @@ type Worker struct {
 func (n *Worker) run() {
 	// 开启一个协程处理放入管道的任务
 	go func() {
-		for f := range n.task {
-			if f == nil {
+		for handler := range n.task {
+			if handler == nil {
 				// 协程池的正在运行worker数减一
 				n.pool.dcrRunning()
 				return
 			}
 			// 执行传入的任务
-			f()
+			handler.Process()
 			// 执行完后将worker放入协程池的worker集合
 			n.pool.putWorker(n)
 		}

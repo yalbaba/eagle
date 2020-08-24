@@ -23,7 +23,7 @@ type Pool struct {
 	workers []*Worker
 
 	// 协程池关闭信号
-	release chan sig
+	closeChan chan sig
 
 	// 保证数据处理安全
 	lock sync.Mutex
@@ -46,14 +46,14 @@ func NewPool(opts ...option) *Pool {
 	p := &Pool{
 		capacity:       conf.capacity,
 		expiryDuration: conf.expiryDuration,
-		release:        make(chan sig, 1),
+		closeChan:      make(chan sig, 1),
 	}
 	// 开启线程清除空闲太久的worker
-	go p.periodicallyPurge()
+	go p.cleanFreeForDeadline()
 	return p
 }
 
-func (p *Pool) periodicallyPurge() {
+func (p *Pool) cleanFreeForDeadline() {
 	// 构造一个定时器，定时检查是否有空闲太久的worker
 	checkTicker := time.NewTicker(p.expiryDuration)
 	for range checkTicker.C {
@@ -63,7 +63,7 @@ func (p *Pool) periodicallyPurge() {
 		freeWorkers := p.workers
 		var usedWorkers []*Worker
 		// 检查pool是否已经关闭或者没有worker在运行或闲置
-		if len(p.release) > 0 && p.Running() == 0 && len(p.workers) == 0 {
+		if len(p.closeChan) > 0 && p.Running() == 0 && len(p.workers) == 0 {
 			p.lock.Unlock()
 			return
 		}
@@ -83,13 +83,13 @@ func (p *Pool) periodicallyPurge() {
 }
 
 // 提交任务到worker
-func (p *Pool) Submit(task Handler) error {
-	if len(p.release) > 0 {
+func (p *Pool) Submit(h Handler) error {
+	if len(p.closeChan) > 0 {
 		return fmt.Errorf("该协程池已经关闭")
 	}
 	w := p.getWorker()
 	// 将任务放入woker里
-	w.task <- task
+	w.task <- h
 	return nil
 }
 

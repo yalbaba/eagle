@@ -2,31 +2,30 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"os/signal"
 	"time"
 
-	eagle "yalbaba/Eagle"
+	eagle "yalbaba/eagle"
 )
 
+type TestHandler struct {
+	id int
+}
+
+func (t *TestHandler) Process() {
+	fmt.Println("process job::", t.id)
+	time.Sleep(1 * time.Second)
+}
+
 func main() {
-	p := eagle.NewPool()
-	t := func(ps ...int) error {
-		fmt.Println("11")
-		return nil
-	}
+	p := eagle.NewPool(eagle.WithCapacity(50))
+
 	now := time.Now()
 	for i := 0; i < 1000; i++ {
+		t := &TestHandler{
+			id: i,
+		}
 		p.Submit(t)
 	}
 	cur := time.Now()
-
-	fmt.Println("sub::::", now.Sub(cur))
-
-	time.Sleep(time.Second)
-	c := make(chan os.Signal)
-	signal.Notify(c)
-	fmt.Println("线程池启动了")
-	<-c
-	fmt.Println("结束")
+	fmt.Println("sub::::", cur.Sub(now))
 }
